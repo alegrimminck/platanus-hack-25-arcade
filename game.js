@@ -165,9 +165,6 @@ function create() {
   sceneRef = this;
   g = this.add.graphics();
 
-  // Initialize Matrix background
-  initMatrixBackground();
-
   // Always start with title screen
   // Load high score
   let highScore = 0;
@@ -1377,19 +1374,20 @@ function playTone(scene, frequency, duration) {
 
 // Matrix background functions
 function initMatrixBackground() {
-  matrixColumns = [];
-  matrixTexts = [];
-  const cols = 30;
-  const charSetSimple = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*';
-  const maxTexts = 200;
+  const MATRIX_COLS = 80;
+  const MATRIX_BASE_SPEED = 80;
 
-  for (let i = 0; i < cols; i++) {
-    const x = (i / cols) * 800;
+  matrixColumns = [];
+  const charSetSimple = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*';
+  const maxTexts = MATRIX_COLS * 20;
+
+  for (let i = 0; i < MATRIX_COLS; i++) {
+    const x = (i / MATRIX_COLS) * 800;
     const length = 8 + Math.random() * 10;
     const column = {
       x: x,
       y: -Math.random() * 600,
-      speed: 80 + Math.random() * 120,
+      speed: MATRIX_BASE_SPEED + Math.random() * 120,
       chars: [],
       length: length
     };
@@ -1400,15 +1398,18 @@ function initMatrixBackground() {
     }
   }
 
-  for (let i = 0; i < maxTexts; i++) {
-    const t = sceneRef.add.text(0, 0, '', {
-      fontSize: '14px',
-      fontFamily: 'monospace',
-      fill: '#007700'
-    });
-    t.setDepth(-1000);
-    t.setVisible(false);
-    matrixTexts.push(t);
+  if (!matrixTexts || matrixTexts.length === 0) {
+    matrixTexts = [];
+    for (let i = 0; i < maxTexts; i++) {
+      const t = sceneRef.add.text(0, 0, '', {
+        fontSize: '14px',
+        fontFamily: 'monospace',
+        fill: '#007700'
+      });
+      t.setDepth(-1000);
+      t.setVisible(false);
+      matrixTexts.push(t);
+    }
   }
 }
 
