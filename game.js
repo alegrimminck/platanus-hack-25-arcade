@@ -139,7 +139,7 @@ function initGame() {
   kills = 0;
   
   // Keyboard input
-  keys = sceneRef.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT');
+  keys = sceneRef.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,Z,R');
   
   // Initialize Firewall weapon
   wpns.push({
@@ -184,6 +184,29 @@ function update(time, delta) {
     if (!keys.lastShopPress || now - keys.lastShopPress > 500) {
       keys.lastShopPress = now;
       showShop();
+    }
+  }
+  
+  // Check for Z keypress (level up)
+  if (keys.Z && keys.Z.isDown) {
+    const now = time;
+    if (!keys.lastZPress || now - keys.lastZPress > 200) {
+      keys.lastZPress = now;
+      const reqXp = 5 + (lvl - 1) * 5;
+      xp = Math.max(0, xp - reqXp);
+      lvl++;
+      playTone(sceneRef, 500, 0.1);
+      createParticles(p.x, p.y, 0xffff00, 8);
+      showLevelUp();
+    }
+  }
+  
+  // Check for R keypress (restart game)
+  if (keys.R && keys.R.isDown) {
+    const now = time;
+    if (!keys.lastRPress || now - keys.lastRPress > 500) {
+      keys.lastRPress = now;
+      sceneRef.scene.restart();
     }
   }
   
