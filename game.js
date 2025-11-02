@@ -154,36 +154,41 @@ function createBugSprite(color, frame = 0) {
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   const hex = '#' + color.toString(16).padStart(6, '0');
-  ctx.fillStyle = hex;
-  // Cuerpo
-  ctx.fillRect(6, 7, 4, 3);
-  // Cabeza
-  ctx.fillRect(7, 5, 2, 3);
+  const dark = '#' + (color - 0x202020).toString(16).padStart(6, '0');
 
-  // Patas animadas según frame (0, 1, o 2)
+  // Body (oval insect body)
+  ctx.fillStyle = hex;
+  ctx.fillRect(6, 8, 4, 4); // Main body segment
+  ctx.fillRect(5, 9, 6, 2); // Wider middle
+
+  // Head
+  ctx.fillRect(7, 6, 2, 2);
+
+  // Wings flapping animation
+  ctx.fillStyle = dark;
   if (frame === 0) {
-    // Frame 1: patas en posición inicial
-    ctx.fillRect(4, 9, 2, 1);
-    ctx.fillRect(10, 9, 2, 1);
-    ctx.fillRect(5, 11, 1, 2);
-    ctx.fillRect(10, 11, 1, 2);
+    // Frame 1: wings up
+    ctx.fillRect(3, 7, 2, 3); // Left wing up
+    ctx.fillRect(11, 7, 2, 3); // Right wing up
   } else if (frame === 1) {
-    // Frame 2: patas extendidas (caminando)
-    ctx.fillRect(4, 8, 2, 1);
-    ctx.fillRect(10, 10, 2, 1);
-    ctx.fillRect(5, 10, 1, 2);
-    ctx.fillRect(10, 12, 1, 2);
+    // Frame 2: wings mid (horizontal)
+    ctx.fillRect(3, 9, 2, 2); // Left wing mid
+    ctx.fillRect(11, 9, 2, 2); // Right wing mid
   } else {
-    // Frame 3: patas en posición alternativa
-    ctx.fillRect(4, 10, 2, 1);
-    ctx.fillRect(10, 8, 2, 1);
-    ctx.fillRect(5, 12, 1, 2);
-    ctx.fillRect(10, 10, 1, 2);
+    // Frame 3: wings down
+    ctx.fillRect(3, 11, 2, 3); // Left wing down
+    ctx.fillRect(11, 11, 2, 3); // Right wing down
   }
 
-  // Antenas
-  ctx.fillRect(8, 3, 1, 2);
-  ctx.fillRect(7, 2, 3, 1);
+  // Antenna
+  ctx.fillStyle = hex;
+  ctx.fillRect(8, 4, 1, 2);
+  ctx.fillRect(7, 3, 3, 1);
+
+  // Eyes
+  ctx.fillRect(6, 6, 1, 1);
+  ctx.fillRect(9, 6, 1, 1);
+
   return c.toDataURL();
 }
 
@@ -191,37 +196,37 @@ function create() {
   sceneRef = this;
   g = this.add.graphics();
 
-  // Create animations for enemy types
+  // Create animations for enemy types (flying animations)
   this.anims.create({
-    key: 'bugWalk',
+    key: 'bugFly',
     frames: [
       { key: 'bug_frame0' },
       { key: 'bug_frame1' },
       { key: 'bug_frame2' }
     ],
-    frameRate: 8,
+    frameRate: 12,
     repeat: -1
   });
 
   this.anims.create({
-    key: 'virusWalk',
+    key: 'virusFly',
     frames: [
       { key: 'virus_frame0' },
       { key: 'virus_frame1' },
       { key: 'virus_frame2' }
     ],
-    frameRate: 10,
+    frameRate: 15,
     repeat: -1
   });
 
   this.anims.create({
-    key: 'trojanWalk',
+    key: 'trojanFly',
     frames: [
       { key: 'trojan_frame0' },
       { key: 'trojan_frame1' },
       { key: 'trojan_frame2' }
     ],
-    frameRate: 6,
+    frameRate: 10,
     repeat: -1
   });
 
@@ -824,7 +829,7 @@ function spawnEnemy(type, difficultyMult = 1) {
   if (type === 'bug') {
     const baseHp = 20, baseSpd = 80, baseXp = 1;
     const sprite = sceneRef.add.sprite(x, y, 'bug_frame0').setScale(2).setOrigin(0.5);
-    sprite.play('bugWalk');
+    sprite.play('bugFly');
     const e = {
       type: 'bug',
       x: x,
@@ -842,7 +847,7 @@ function spawnEnemy(type, difficultyMult = 1) {
   } else if (type === 'virus') {
     const baseHp = 10, baseSpd = 140, baseXp = 2;
     const sprite = sceneRef.add.sprite(x, y, 'virus_frame0').setScale(2).setOrigin(0.5);
-    sprite.play('virusWalk');
+    sprite.play('virusFly');
     const e = {
       type: 'virus',
       x: x,
@@ -860,7 +865,7 @@ function spawnEnemy(type, difficultyMult = 1) {
   } else if (type === 'trojan') {
     const baseHp = 80, baseSpd = 50, baseXp = 5;
     const sprite = sceneRef.add.sprite(x, y, 'trojan_frame0').setScale(2.5).setOrigin(0.5);
-    sprite.play('trojanWalk');
+    sprite.play('trojanFly');
     const e = {
       type: 'trojan',
       x: x,
