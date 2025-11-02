@@ -23,6 +23,8 @@ const game = new Phaser.Game(config);
 let p, enemies = [], projs = [], xpCrys = [], goldDrops = [], wpns = [], state, lvl, xp, hp, maxHp, spd, spawnT, lastFire, keys, g, sceneRef;
 let gameTime, startTime, uiTexts, upgradeCards, xpGain, pickupRange, allDmgMult, particles = [], kills, gold;
 let projCountMult = 1, projSpdMult = 1, auraSizeMult = 1;
+let attackSpeedMult = 1; // Attack speed multiplier (reduces weapon rate)
+let projQueue = []; // Queue for sequential projectile firing
 const MENU = 0, PLAYING = 1, LEVELUP = 2, GAMEOVER = 3, SHOP = 4;
 
 // Matrix background columns
@@ -287,6 +289,8 @@ function initGame() {
   projCountMult = 1;
   projSpdMult = 1;
   auraSizeMult = 1;
+  attackSpeedMult = 1;
+  projQueue = [];
   kills = 0;
 
   // Keyboard input
@@ -400,24 +404,38 @@ function update(time, delta) {
 
   // Enemy spawning (wave system with difficulty scaling)
   const wave = Math.floor(gameTime / 30000);
-  const baseSpawnRate = Math.max(500, 2000 - wave * 100);
-
+  
+  // Spawn rate decreases over time (enemies spawn faster)
+  // Base starts at 2000ms, decreases by 100ms per wave, minimum 300ms
+  // Also decreases gradually within each wave based on time
+  const waveProgress = (gameTime % 30000) / 30000; // 0 to 1 within current wave
+  const baseSpawnRate = Math.max(300, 2000 - wave * 100 - waveProgress * 50);
+  
   // Calculate difficulty multiplier based on time (increases every 2 minutes)
   const difficultyMult = 1 + Math.floor(gameTime / 120000) * 0.15 + (gameTime % 120000) / 120000 * 0.15;
-
+  
+  // Calculate spawn count multiplier (spawn multiple enemies at once as time progresses)
+  const spawnCountMult = 1 + Math.floor(gameTime / 60000); // +1 enemy every minute
+  
   spawnT += delta;
   if (spawnT > baseSpawnRate) {
     spawnT = 0;
-    const maxEnemies = Math.min(100, 10 + wave * 2);
+    const maxEnemies = Math.min(100, 10 + wave * 3); // Allow more enemies on screen
     if (enemies.length < maxEnemies) {
-      // Spawn based on wave
-      const rand = Math.random();
-      if (wave < 2 || rand < 0.6) {
-        spawnEnemy('bug', difficultyMult);
-      } else if (wave < 5 || rand < 0.85) {
-        spawnEnemy('virus', difficultyMult);
-      } else {
-        spawnEnemy('trojan', difficultyMult);
+      // Spawn multiple enemies if upgraded
+      const spawnCount = Math.min(spawnCountMult, 3); // Max 3 at once
+      for (let s = 0; s < spawnCount; s++) {
+        if (enemies.length >= maxEnemies) break;
+        
+        // Spawn based on wave
+        const rand = Math.random();
+        if (wave < 2 || rand < 0.6) {
+          spawnEnemy('bug', difficultyMult);
+        } else if (wave < 5 || rand < 0.85) {
+          spawnEnemy('virus', difficultyMult);
+        } else {
+          spawnEnemy('trojan', difficultyMult);
+        }
       }
     }
   }
@@ -492,12 +510,17 @@ function update(time, delta) {
         }
       }
     }
+    
+    // Handle chain bounce
+    if (proj.owner === 'chain' && proj.bounces !== undefined) {
+      // Chain projectile will bounce in collision handler
+    }
 
     proj.x += proj.vx * (delta / 1000);
     proj.y += proj.vy * (delta / 1000);
 
-    // Remove if off screen (unless returning hook)
-    if (proj.owner !== 'hook' || !proj.returning) {
+    // Remove if off screen (unless returning hook or chain bouncing)
+    if ((proj.owner !== 'hook' || !proj.returning) && proj.owner !== 'chain') {
       if (proj.x < -50 || proj.x > 850 || proj.y < -50 || proj.y > 650) {
         projs.splice(i, 1);
         continue;
@@ -509,9 +532,63 @@ function update(time, delta) {
       const e = enemies[j];
       const d = Math.sqrt((proj.x - e.x) ** 2 + (proj.y - e.y) ** 2);
       if (d < proj.rad + e.rad) {
+        // Skip if chain projectile already hit this enemy
+        if (proj.owner === 'chain' && proj.hitEnemies && proj.hitEnemies.includes(j)) {
+          continue;
+        }
+        
         e.hp -= proj.dmg;
         playTone(sceneRef, 100, 0.05);
         createParticles(e.x, e.y, e.color, 4);
+        
+        // Handle chain bounce
+        if (proj.owner === 'chain') {
+          if (!proj.hitEnemies) proj.hitEnemies = [];
+          proj.hitEnemies.push(j);
+          
+          if (e.hp <= 0) {
+            xpCrys.push({ x: e.x, y: e.y, rad: 5, val: e.xp });
+            goldDrops.push({ x: e.x, y: e.y, rad: 4, val: e.gold || Math.floor(e.xp * 2) });
+            createParticles(e.x, e.y, e.color, 12);
+            if (enemies[j].sprite) enemies[j].sprite.destroy();
+            enemies.splice(j, 1);
+            kills++;
+            // Remove from hit list if enemy was destroyed
+            const idx = proj.hitEnemies.indexOf(j);
+            if (idx >= 0) proj.hitEnemies.splice(idx, 1);
+          }
+          
+          // Find next closest enemy to bounce to
+          let nextTarget = null;
+          let minDist = Infinity;
+          for (let k = 0; k < enemies.length; k++) {
+            if (proj.hitEnemies.includes(k)) continue; // Skip already hit enemies
+            const dist = Math.sqrt((e.x - enemies[k].x) ** 2 + (e.y - enemies[k].y) ** 2);
+            if (dist < minDist && dist < 300) { // Max bounce range
+              minDist = dist;
+              nextTarget = enemies[k];
+            }
+          }
+          
+          if (nextTarget && (proj.bounces || 0) < 5) { // Max 5 bounces
+            const dx = nextTarget.x - e.x;
+            const dy = nextTarget.y - e.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+              proj.bounces = (proj.bounces || 0) + 1;
+              const baseSpd = 350;
+              const spd = baseSpd * projSpdMult;
+              proj.vx = (dx / len) * spd;
+              proj.vy = (dy / len) * spd;
+            }
+          } else {
+            // No more targets or max bounces reached
+            projs.splice(i, 1);
+            break;
+          }
+          continue; // Don't remove chain projectile yet
+        }
+        
         if (e.hp <= 0) {
           xpCrys.push({ x: e.x, y: e.y, rad: 5, val: e.xp });
           goldDrops.push({ x: e.x, y: e.y, rad: 4, val: e.gold || Math.floor(e.xp * 2) });
@@ -576,18 +653,41 @@ function update(time, delta) {
     }
   }
 
-  // Update weapons
+  // Process projectile queue (sequential firing)
+  for (let i = projQueue.length - 1; i >= 0; i--) {
+    const queued = projQueue[i];
+    if (now >= queued.fireTime) {
+      // Determine color based on weapon type (can be extended)
+      const color = queued.color || 0x00ff00;
+      projs.push({
+        x: queued.x,
+        y: queued.y,
+        vx: Math.cos(queued.angle) * queued.spd,
+        vy: Math.sin(queued.angle) * queued.spd,
+        dmg: queued.dmg,
+        rad: 4,
+        color: color
+      });
+      projQueue.splice(i, 1);
+    }
+  }
+
+  // Update weapons (apply attack speed multiplier to rate)
   for (let w of wpns) {
-    if (w.type === 'firewall' && now - w.lastFire >= w.rate) {
+    const effectiveRate = w.rate / attackSpeedMult; // Lower rate = faster attacks
+    if (w.type === 'firewall' && now - w.lastFire >= effectiveRate) {
       fireFirewall(w, now);
       w.lastFire = now;
-    } else if (w.type === 'malware' && now - w.lastFire >= w.rate) {
+    } else if (w.type === 'malware' && now - w.lastFire >= effectiveRate) {
       fireMalware(w, now);
       w.lastFire = now;
     } else if (w.type === 'ddos') {
       updateDDoS(w, now);
-    } else if (w.type === 'hook' && now - w.lastFire >= w.rate) {
+    } else if (w.type === 'hook' && now - w.lastFire >= effectiveRate) {
       fireHook(w, now);
+      w.lastFire = now;
+    } else if (w.type === 'chain' && now - w.lastFire >= effectiveRate) {
+      fireChain(w, now);
       w.lastFire = now;
     }
   }
@@ -735,24 +835,21 @@ function fireFirewall(w, now) {
       const baseSpd = 400;
       const spd = baseSpd * projSpdMult;
       const count = Math.max(1, Math.floor(projCountMult));
-
-      // Fire multiple projectiles if upgraded
+      let angle = Math.atan2(dy, dx);
+      
+      // Queue projectiles to fire sequentially one after another
       for (let i = 0; i < count; i++) {
-        let angle = Math.atan2(dy, dx);
-        // Spread projectiles slightly if multiple
-        if (count > 1) {
-          const spread = (i - (count - 1) / 2) * 0.1;
-          angle += spread;
-        }
-
-        projs.push({
+        const delay = i * 50; // 50ms delay between each projectile
+        // Use same angle for all projectiles (one behind another)
+        projQueue.push({
           x: p.x,
           y: p.y,
-          vx: Math.cos(angle) * spd,
-          vy: Math.sin(angle) * spd,
+          angle: angle,
+          spd: spd,
           dmg: Math.floor(w.dmg * allDmgMult),
-          rad: 4,
-          color: 0x00ff00
+          delay: delay,
+          fireTime: now + delay,
+          color: 0x00ff00 // Green for Firewall
         });
       }
       playTone(sceneRef, 200, 0.1);
@@ -887,19 +984,25 @@ function endGame() {
 
 function fireMalware(w, now) {
   const baseDirs = 8;
-  const dirs = Math.max(8, Math.floor(baseDirs * projCountMult));
+  const count = Math.max(1, Math.floor(projCountMult));
+  const dirs = baseDirs * count; // Multiply directions by projectile count
   const baseSpd = 300;
   const spd = baseSpd * projSpdMult;
+  
+  // Queue projectiles sequentially for malware spread too
   for (let i = 0; i < dirs; i++) {
     const angle = (i / dirs) * Math.PI * 2;
-    projs.push({
+    const delay = Math.floor(i / baseDirs) * 50; // 50ms delay between each "burst" of 8 projectiles
+    
+    projQueue.push({
       x: p.x,
       y: p.y,
-      vx: Math.cos(angle) * spd,
-      vy: Math.sin(angle) * spd,
+      angle: angle,
+      spd: spd,
       dmg: Math.floor(w.dmg * allDmgMult),
-      rad: 4,
-      color: 0x00ff00
+      delay: delay,
+      fireTime: now + delay,
+      color: 0x00ff00 // Green for Malware
     });
   }
   playTone(sceneRef, 200, 0.1);
@@ -929,6 +1032,33 @@ function fireHook(w, now) {
       };
       projs.push(hook);
       playTone(sceneRef, 200, 0.1);
+    }
+  }
+}
+
+function fireChain(w, now) {
+  const nearest = findNearestEnemy();
+  if (nearest) {
+    const dx = nearest.x - p.x;
+    const dy = nearest.y - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      const baseSpd = 350;
+      const spd = baseSpd * projSpdMult;
+      const chain = {
+        x: p.x,
+        y: p.y,
+        vx: (dx / len) * spd,
+        vy: (dy / len) * spd,
+        dmg: Math.floor(w.dmg * allDmgMult),
+        rad: 5,
+        color: 0xffaa00, // Orange for chain
+        owner: 'chain',
+        bounces: 0,
+        hitEnemies: []
+      };
+      projs.push(chain);
+      playTone(sceneRef, 250, 0.1);
     }
   }
 }
@@ -1138,10 +1268,12 @@ function getShopItems() {
   const hasMalware = wpns.some(w => w.type === 'malware');
   const hasDDoS = wpns.some(w => w.type === 'ddos');
   const hasHook = wpns.some(w => w.type === 'hook');
-
+  const hasChain = wpns.some(w => w.type === 'chain');
+  
   if (!hasMalware) items.push({ type: 'weapon', name: 'Malware Spread', desc: '8-directional attack', weapon: 'malware', cost: 50 });
   if (!hasDDoS) items.push({ type: 'weapon', name: 'DDoS Attack', desc: 'Area damage aura', weapon: 'ddos', cost: 75 });
   if (!hasHook) items.push({ type: 'weapon', name: 'Phishing Hook', desc: 'Boomerang projectile', weapon: 'hook', cost: 60 });
+  if (!hasChain) items.push({ type: 'weapon', name: 'Chain Lightning', desc: 'Bounces between enemies', weapon: 'chain', cost: 65 });
 
   // Permanent upgrades
   items.push({ type: 'hp', name: '+20 Max HP', desc: 'Increase max health', cost: 40 });
@@ -1150,6 +1282,10 @@ function getShopItems() {
   items.push({ type: 'pickup', name: '+5% Pickup Range', desc: 'Larger magnet range', cost: 30 });
   items.push({ type: 'damage', name: '+10% All Damage', desc: 'Boost all weapons', cost: 50 });
   items.push({ type: 'heal', name: 'Heal 50%', desc: 'Restore half HP', cost: 25 });
+  items.push({ type: 'projcount', name: '+1 Projectile', desc: 'Fire extra projectile', cost: 55 });
+  items.push({ type: 'projspeed', name: '+20% Proj Speed', desc: 'Faster projectiles', cost: 45 });
+  items.push({ type: 'aurasize', name: '+25% Aura Size', desc: 'Larger DDoS aura', cost: 50 });
+  items.push({ type: 'attackspeed', name: '+15% Attack Speed', desc: 'Fire weapons faster', cost: 50 });
 
   // Weapon upgrades (if weapon exists)
   for (let w of wpns) {
@@ -1287,10 +1423,12 @@ function getUpgradeOptions() {
   const hasMalware = wpns.some(w => w.type === 'malware');
   const hasDDoS = wpns.some(w => w.type === 'ddos');
   const hasHook = wpns.some(w => w.type === 'hook');
-
+  const hasChain = wpns.some(w => w.type === 'chain');
+  
   if (!hasMalware) all.push({ type: 'weapon', name: 'Malware Spread', desc: '8-directional attack', weapon: 'malware' });
   if (!hasDDoS) all.push({ type: 'weapon', name: 'DDoS Attack', desc: 'Area damage aura', weapon: 'ddos' });
   if (!hasHook) all.push({ type: 'weapon', name: 'Phishing Hook', desc: 'Boomerang projectile', weapon: 'hook' });
+  if (!hasChain) all.push({ type: 'weapon', name: 'Chain Lightning', desc: 'Bounces between enemies', weapon: 'chain' });
 
   // Weapon level ups
   for (let w of wpns) {
@@ -1307,7 +1445,8 @@ function getUpgradeOptions() {
   all.push({ type: 'projcount', name: '+1 Projectile', desc: 'Fire extra projectile' });
   all.push({ type: 'projspeed', name: '+20% Proj Speed', desc: 'Faster projectiles' });
   all.push({ type: 'aurasize', name: '+25% Aura Size', desc: 'Larger DDoS aura' });
-
+  all.push({ type: 'attackspeed', name: '+15% Attack Speed', desc: 'Fire weapons faster' });
+  
   // Shuffle and pick 3
   for (let i = all.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1324,6 +1463,8 @@ function applyUpgrade(opt) {
       wpns.push({ type: 'ddos', dmg: 3, rate: 0, lastFire: 0, lvl: 1 });
     } else if (opt.weapon === 'hook') {
       wpns.push({ type: 'hook', dmg: 12, rate: 1500, lastFire: 0, lvl: 1 });
+    } else if (opt.weapon === 'chain') {
+      wpns.push({ type: 'chain', dmg: 8, rate: 1800, lastFire: 0, lvl: 1 });
     }
   } else if (opt.type === 'weaponup') {
     const w = wpns.find(w => w.type === opt.weapon);
@@ -1351,6 +1492,8 @@ function applyUpgrade(opt) {
     projSpdMult *= 1.2;
   } else if (opt.type === 'aurasize') {
     auraSizeMult *= 1.25;
+  } else if (opt.type === 'attackspeed') {
+    attackSpeedMult *= 1.15;
   }
 }
 
