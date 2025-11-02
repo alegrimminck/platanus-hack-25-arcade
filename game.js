@@ -1055,6 +1055,19 @@ function showLevelUp() {
   // Generate 3 random upgrades
   const options = getUpgradeOptions();
   upgradeCards = [];
+  let selectedIndex = 0;
+  
+  const updateCardVisuals = () => {
+    for (let i = 0; i < upgradeCards.length; i++) {
+      const uc = upgradeCards[i];
+      uc.card.clear();
+      const isSelected = i === selectedIndex;
+      uc.card.fillStyle(0x1a1a1a, 1);
+      uc.card.lineStyle(3, isSelected ? 0xffff00 : 0x00ffff, 1);
+      uc.card.fillRect(uc.x - 100, uc.y - 80, 200, 160);
+      uc.card.strokeRect(uc.x - 100, uc.y - 80, 200, 160);
+    }
+  };
   
   for (let i = 0; i < 3; i++) {
     const opt = options[i];
@@ -1063,14 +1076,14 @@ function showLevelUp() {
     
     const card = sceneRef.add.graphics();
     card.fillStyle(0x1a1a1a, 1);
-    card.lineStyle(2, 0x00ffff, 1);
+    card.lineStyle(3, i === 0 ? 0xffff00 : 0x00ffff, 1);
     card.fillRect(cardX - 100, cardY - 80, 200, 160);
     card.strokeRect(cardX - 100, cardY - 80, 200, 160);
     
     const name = sceneRef.add.text(cardX, cardY - 40, opt.name, {
       fontSize: '20px',
       fontFamily: 'Arial',
-      color: '#00ffff'
+      color: i === 0 ? '#ffff00' : '#00ffff'
     }).setOrigin(0.5);
     
     const desc = sceneRef.add.text(cardX, cardY + 20, opt.desc, {
@@ -1082,27 +1095,59 @@ function showLevelUp() {
     upgradeCards.push({ card, name, desc, opt, x: cardX, y: cardY });
   }
   
-  // Click handler
-  sceneRef.input.once('pointerdown', (pointer) => {
-    for (let i = 0; i < upgradeCards.length; i++) {
-      const uc = upgradeCards[i];
-      const dx = pointer.x - uc.x;
-      const dy = pointer.y - uc.y;
-      if (dx >= -100 && dx <= 100 && dy >= -80 && dy <= 80) {
-        applyUpgrade(uc.opt);
-        state = PLAYING;
-        overlay.destroy();
-        title.destroy();
-        for (let uc2 of upgradeCards) {
-          uc2.card.destroy();
-          uc2.name.destroy();
-          uc2.desc.destroy();
-        }
-        upgradeCards = [];
-        break;
-      }
+  const selectUpgrade = () => {
+    applyUpgrade(upgradeCards[selectedIndex].opt);
+    state = PLAYING;
+    overlay.destroy();
+    title.destroy();
+    for (let uc2 of upgradeCards) {
+      uc2.card.destroy();
+      uc2.name.destroy();
+      uc2.desc.destroy();
     }
-  });
+    upgradeCards = [];
+    if (keys.A) keys.A.off('down');
+    if (keys.D) keys.D.off('down');
+    if (keys.SPACE) keys.SPACE.off('down');
+  };
+  
+  const navLeft = () => {
+    if (state !== LEVELUP) return;
+    selectedIndex = (selectedIndex - 1 + 3) % 3;
+    updateCardVisuals();
+    for (let i = 0; i < upgradeCards.length; i++) {
+      upgradeCards[i].name.setColor(i === selectedIndex ? '#ffff00' : '#00ffff');
+    }
+    playTone(sceneRef, 300, 0.1);
+  };
+  
+  const navRight = () => {
+    if (state !== LEVELUP) return;
+    selectedIndex = (selectedIndex + 1) % 3;
+    updateCardVisuals();
+    for (let i = 0; i < upgradeCards.length; i++) {
+      upgradeCards[i].name.setColor(i === selectedIndex ? '#ffff00' : '#00ffff');
+    }
+    playTone(sceneRef, 300, 0.1);
+  };
+  
+  keys.A = sceneRef.input.keyboard.addKey('A');
+  keys.D = sceneRef.input.keyboard.addKey('D');
+  keys.SPACE = sceneRef.input.keyboard.addKey('SPACE');
+  
+  let lastNavTime = 0;
+  const navDelay = 200;
+  
+  const handleNav = (direction) => {
+    const now = Date.now();
+    if (now - lastNavTime < navDelay) return;
+    lastNavTime = now;
+    direction();
+  };
+  
+  keys.A.on('down', () => handleNav(navLeft));
+  keys.D.on('down', () => handleNav(navRight));
+  keys.SPACE.once('down', selectUpgrade);
 }
 
 function getUpgradeOptions() {
