@@ -33,9 +33,16 @@ let matrixColumns = [], matrixTexts = [];
 function preload() {
   // Crear sprites de pixel art programáticamente
   this.load.image('hacker', createHackerSprite());
-  this.load.image('bug', createBugSprite(0xff0000));
-  this.load.image('virus', createBugSprite(0xff00ff));
-  this.load.image('trojan', createBugSprite(0x0000ff));
+  // Load multiple frames for each enemy type (3 frames for walking animation)
+  this.load.image('bug_frame0', createBugSprite(0xff0000, 0));
+  this.load.image('bug_frame1', createBugSprite(0xff0000, 1));
+  this.load.image('bug_frame2', createBugSprite(0xff0000, 2));
+  this.load.image('virus_frame0', createBugSprite(0xff00ff, 0));
+  this.load.image('virus_frame1', createBugSprite(0xff00ff, 1));
+  this.load.image('virus_frame2', createBugSprite(0xff00ff, 2));
+  this.load.image('trojan_frame0', createBugSprite(0x0000ff, 0));
+  this.load.image('trojan_frame1', createBugSprite(0x0000ff, 1));
+  this.load.image('trojan_frame2', createBugSprite(0x0000ff, 2));
 }
 
 function createHackerSprite() {
@@ -141,7 +148,7 @@ function createHackerSprite() {
   return c.toDataURL();
 }
 
-function createBugSprite(color) {
+function createBugSprite(color, frame = 0) {
   const c = document.createElement('canvas');
   c.width = 16; c.height = 16;
   const ctx = c.getContext('2d');
@@ -152,11 +159,28 @@ function createBugSprite(color) {
   ctx.fillRect(6, 7, 4, 3);
   // Cabeza
   ctx.fillRect(7, 5, 2, 3);
-  // Patas
-  ctx.fillRect(4, 9, 2, 1);
-  ctx.fillRect(10, 9, 2, 1);
-  ctx.fillRect(5, 11, 1, 2);
-  ctx.fillRect(10, 11, 1, 2);
+
+  // Patas animadas según frame (0, 1, o 2)
+  if (frame === 0) {
+    // Frame 1: patas en posición inicial
+    ctx.fillRect(4, 9, 2, 1);
+    ctx.fillRect(10, 9, 2, 1);
+    ctx.fillRect(5, 11, 1, 2);
+    ctx.fillRect(10, 11, 1, 2);
+  } else if (frame === 1) {
+    // Frame 2: patas extendidas (caminando)
+    ctx.fillRect(4, 8, 2, 1);
+    ctx.fillRect(10, 10, 2, 1);
+    ctx.fillRect(5, 10, 1, 2);
+    ctx.fillRect(10, 12, 1, 2);
+  } else {
+    // Frame 3: patas en posición alternativa
+    ctx.fillRect(4, 10, 2, 1);
+    ctx.fillRect(10, 8, 2, 1);
+    ctx.fillRect(5, 12, 1, 2);
+    ctx.fillRect(10, 10, 1, 2);
+  }
+
   // Antenas
   ctx.fillRect(8, 3, 1, 2);
   ctx.fillRect(7, 2, 3, 1);
@@ -166,6 +190,40 @@ function createBugSprite(color) {
 function create() {
   sceneRef = this;
   g = this.add.graphics();
+
+  // Create animations for enemy types
+  this.anims.create({
+    key: 'bugWalk',
+    frames: [
+      { key: 'bug_frame0' },
+      { key: 'bug_frame1' },
+      { key: 'bug_frame2' }
+    ],
+    frameRate: 8,
+    repeat: -1
+  });
+
+  this.anims.create({
+    key: 'virusWalk',
+    frames: [
+      { key: 'virus_frame0' },
+      { key: 'virus_frame1' },
+      { key: 'virus_frame2' }
+    ],
+    frameRate: 10,
+    repeat: -1
+  });
+
+  this.anims.create({
+    key: 'trojanWalk',
+    frames: [
+      { key: 'trojan_frame0' },
+      { key: 'trojan_frame1' },
+      { key: 'trojan_frame2' }
+    ],
+    frameRate: 6,
+    repeat: -1
+  });
 
   // Always start with title screen
   // Load high score
@@ -765,6 +823,8 @@ function spawnEnemy(type, difficultyMult = 1) {
 
   if (type === 'bug') {
     const baseHp = 20, baseSpd = 80, baseXp = 1;
+    const sprite = sceneRef.add.sprite(x, y, 'bug_frame0').setScale(2).setOrigin(0.5);
+    sprite.play('bugWalk');
     const e = {
       type: 'bug',
       x: x,
@@ -776,11 +836,13 @@ function spawnEnemy(type, difficultyMult = 1) {
       xp: Math.floor(baseXp * xpMult),
       color: 0xff0000,
       difficultyMult: difficultyMult,
-      sprite: sceneRef.add.sprite(x, y, 'bug').setScale(2).setOrigin(0.5)
+      sprite: sprite
     };
     enemies.push(e);
   } else if (type === 'virus') {
     const baseHp = 10, baseSpd = 140, baseXp = 2;
+    const sprite = sceneRef.add.sprite(x, y, 'virus_frame0').setScale(2).setOrigin(0.5);
+    sprite.play('virusWalk');
     const e = {
       type: 'virus',
       x: x,
@@ -792,11 +854,13 @@ function spawnEnemy(type, difficultyMult = 1) {
       xp: Math.floor(baseXp * xpMult),
       color: 0xff00ff,
       difficultyMult: difficultyMult,
-      sprite: sceneRef.add.sprite(x, y, 'virus').setScale(2).setOrigin(0.5)
+      sprite: sprite
     };
     enemies.push(e);
   } else if (type === 'trojan') {
     const baseHp = 80, baseSpd = 50, baseXp = 5;
+    const sprite = sceneRef.add.sprite(x, y, 'trojan_frame0').setScale(2.5).setOrigin(0.5);
+    sprite.play('trojanWalk');
     const e = {
       type: 'trojan',
       x: x,
@@ -808,7 +872,7 @@ function spawnEnemy(type, difficultyMult = 1) {
       xp: Math.floor(baseXp * xpMult),
       color: 0x0000ff,
       difficultyMult: difficultyMult,
-      sprite: sceneRef.add.sprite(x, y, 'trojan').setScale(2.5).setOrigin(0.5)
+      sprite: sprite
     };
     enemies.push(e);
   }
