@@ -25,6 +25,9 @@ let gameTime, startTime, uiTexts, upgradeCards, xpGain, pickupRange, allDmgMult,
 let projCountMult = 1, projSpdMult = 1, auraSizeMult = 1;
 const MENU = 0, PLAYING = 1, LEVELUP = 2, GAMEOVER = 3, SHOP = 4;
 
+// Matrix background columns
+let matrixColumns = [], matrixTexts = [];
+
 function preload() {
   // Crear sprites de pixel art programáticamente
   this.load.image('hacker', createHackerSprite());
@@ -162,6 +165,9 @@ function create() {
   sceneRef = this;
   g = this.add.graphics();
 
+  // Initialize Matrix background
+  initMatrixBackground();
+
   // Always start with title screen
   // Load high score
   let highScore = 0;
@@ -250,6 +256,9 @@ function initGame() {
   g = sceneRef.add.graphics();
   state = PLAYING;
 
+  // Initialize Matrix background
+  initMatrixBackground();
+
   // Initialize player
   p = {
     x: 400,
@@ -285,7 +294,7 @@ function initGame() {
 
   // Keyboard input
   keys = sceneRef.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,Z,R,T');
-  
+
   // Initialize Firewall weapon
   wpns.push({
     type: 'firewall',
@@ -331,7 +340,7 @@ function update(time, delta) {
       showShop();
     }
   }
-  
+
   // Check for time cheat keypress (T) - adds 30 seconds
   if (keys.T && keys.T.isDown) {
     const now = time;
@@ -341,7 +350,7 @@ function update(time, delta) {
       playTone(sceneRef, 300, 0.1);
     }
   }
-  
+
   // Check for Z keypress (level up)
   if (keys.Z && keys.Z.isDown) {
     const now = time;
@@ -391,14 +400,14 @@ function update(time, delta) {
       p.sprite.setPosition(p.x, p.y);
     }
   }
-  
+
   // Enemy spawning (wave system with difficulty scaling)
   const wave = Math.floor(gameTime / 30000);
   const baseSpawnRate = Math.max(500, 2000 - wave * 100);
-  
+
   // Calculate difficulty multiplier based on time (increases every 2 minutes)
   const difficultyMult = 1 + Math.floor(gameTime / 120000) * 0.15 + (gameTime % 120000) / 120000 * 0.15;
-  
+
   spawnT += delta;
   if (spawnT > baseSpawnRate) {
     spawnT = 0;
@@ -623,6 +632,9 @@ function update(time, delta) {
     }
   }
 
+  // Update Matrix background
+  updateMatrixBackground(delta);
+
   // Update UI
   const minutes = Math.floor(gameTime / 60000);
   const seconds = Math.floor((gameTime % 60000) / 1000);
@@ -643,13 +655,13 @@ function spawnEnemy(type, difficultyMult = 1) {
   else if (edge === 1) { x = 820; y = Math.random() * 600; }
   else if (edge === 2) { x = Math.random() * 800; y = 620; }
   else { x = -20; y = Math.random() * 600; }
-  
+
   // Apply difficulty scaling
   const hpMult = difficultyMult;
   const spdMult = 1 + (difficultyMult - 1) * 0.3; // Speed increases slower
   const xpMult = difficultyMult;
   const goldMult = difficultyMult;
-  
+
   if (type === 'bug') {
     const baseHp = 20, baseSpd = 80, baseXp = 1, baseGold = 2;
     const e = {
@@ -726,7 +738,7 @@ function fireFirewall(w, now) {
       const baseSpd = 400;
       const spd = baseSpd * projSpdMult;
       const count = Math.max(1, Math.floor(projCountMult));
-      
+
       // Fire multiple projectiles if upgraded
       for (let i = 0; i < count; i++) {
         let angle = Math.atan2(dy, dx);
@@ -735,7 +747,7 @@ function fireFirewall(w, now) {
           const spread = (i - (count - 1) / 2) * 0.1;
           angle += spread;
         }
-        
+
         projs.push({
           x: p.x,
           y: p.y,
@@ -753,6 +765,9 @@ function fireFirewall(w, now) {
 
 function drawGame() {
   g.clear();
+
+  // Draw Matrix background
+  drawMatrixBackground();
 
   // Draw DDoS aura
   for (let w of wpns) {
@@ -1295,7 +1310,7 @@ function getUpgradeOptions() {
   all.push({ type: 'projcount', name: '+1 Projectile', desc: 'Fire extra projectile' });
   all.push({ type: 'projspeed', name: '+20% Proj Speed', desc: 'Faster projectiles' });
   all.push({ type: 'aurasize', name: '+25% Aura Size', desc: 'Larger DDoS aura' });
-  
+
   // Shuffle and pick 3
   for (let i = all.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1358,4 +1373,81 @@ function playTone(scene, frequency, duration) {
 
   oscillator.start(audioContext.currentTime);
   oscillator.stop(audioContext.currentTime + duration);
+}
+
+// Matrix background functions
+function initMatrixBackground() {
+  matrixColumns = [];
+  matrixTexts = [];
+  const cols = 30;
+  const charSetSimple = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*';
+  const maxTexts = 200;
+
+  for (let i = 0; i < cols; i++) {
+    const x = (i / cols) * 800;
+    const length = 8 + Math.random() * 10;
+    const column = {
+      x: x,
+      y: -Math.random() * 600,
+      speed: 80 + Math.random() * 120,
+      chars: [],
+      length: length
+    };
+    matrixColumns.push(column);
+
+    for (let j = 0; j < length; j++) {
+      column.chars.push(charSetSimple[Math.floor(Math.random() * charSetSimple.length)]);
+    }
+  }
+
+  for (let i = 0; i < maxTexts; i++) {
+    const t = sceneRef.add.text(0, 0, '', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      fill: '#007700'
+    });
+    t.setDepth(-1000);
+    t.setVisible(false);
+    matrixTexts.push(t);
+  }
+}
+
+function updateMatrixBackground(delta) {
+  for (let col of matrixColumns) {
+    col.y += col.speed * (delta / 1000);
+
+    if (col.y > 620) {
+      col.y = -20 * col.length;
+      const charSetSimple = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*';
+      for (let j = 0; j < col.length; j++) {
+        col.chars[j] = charSetSimple[Math.floor(Math.random() * charSetSimple.length)];
+      }
+    }
+  }
+
+  let textIdx = 0;
+  const fontSize = 14;
+
+  for (let col of matrixColumns) {
+    for (let i = 0; i < col.length && textIdx < matrixTexts.length; i++) {
+      const y = col.y + i * fontSize;
+      if (y >= -20 && y < 620) {
+        const alpha = Math.max(0, 1 - i * 0.12) * 0.25;
+        const txt = matrixTexts[textIdx];
+        txt.setPosition(col.x, y);
+        txt.setText(col.chars[i]);
+        txt.setAlpha(alpha);
+        txt.setVisible(true);
+        textIdx++;
+      }
+    }
+  }
+
+  for (let i = textIdx; i < matrixTexts.length; i++) {
+    matrixTexts[i].setVisible(false);
+  }
+}
+
+function drawMatrixBackground() {
+  // Matrix background is now handled in updateMatrixBackground with reusable text objects
 }
