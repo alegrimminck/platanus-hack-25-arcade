@@ -20,12 +20,12 @@ const config = {
 const game = new Phaser.Game(config);
 
 // Game state
-let p, enemies = [], projs = [], xpCrys = [], goldDrops = [], wpns = [], state, lvl, xp, hp, maxHp, spd, spawnT, lastFire, keys, g, sceneRef;
-let gameTime, startTime, uiTexts, upgradeCards, xpGain, pickupRange, allDmgMult, particles = [], kills, gold;
+let p, enemies = [], projs = [], xpCrys = [], wpns = [], state, lvl, xp, hp, maxHp, spd, spawnT, lastFire, keys, g, sceneRef;
+let gameTime, startTime, uiTexts, upgradeCards, xpGain, pickupRange, allDmgMult, particles = [], kills;
 let projCountMult = 1, projSpdMult = 1, auraSizeMult = 1;
 let attackSpeedMult = 1; // Attack speed multiplier (reduces weapon rate)
 let projQueue = []; // Queue for sequential projectile firing
-const MENU = 0, PLAYING = 1, LEVELUP = 2, GAMEOVER = 3, SHOP = 4;
+const MENU = 0, PLAYING = 1, LEVELUP = 2, GAMEOVER = 3;
 
 // Matrix background columns
 let matrixColumns = [], matrixTexts = [];
@@ -185,7 +185,6 @@ function showTitleScreen(highScore) {
     if (uiTexts.hp) uiTexts.hp.destroy();
     if (uiTexts.time) uiTexts.time.destroy();
     if (uiTexts.xp) uiTexts.xp.destroy();
-    if (uiTexts.gold) uiTexts.gold.destroy();
     uiTexts = null;
   }
 
@@ -287,12 +286,10 @@ function initGame() {
   enemies = [];
   projs = [];
   xpCrys = [];
-  goldDrops = [];
   wpns = [];
   particles = [];
   lvl = 1;
   xp = 0;
-  gold = 100000;
   spawnT = 0;
   lastFire = 0;
   gameTime = 0;
@@ -323,7 +320,6 @@ function initGame() {
   uiTexts = {
     hp: sceneRef.add.text(16, 16, 'HP: 100/100', { fontSize: '20px', fontFamily: 'Arial', color: '#00ffff' }),
     time: sceneRef.add.text(684, 16, 'TIME: 0:00', { fontSize: '20px', fontFamily: 'Arial', color: '#00ffff' }),
-    gold: sceneRef.add.text(220, 16, 'Gold: 0', { fontSize: '20px', fontFamily: 'Arial', color: '#ffaa00' }),
     xp: sceneRef.add.text(16, 564, 'XP: 0/5 [Lvl 1]', { fontSize: '20px', fontFamily: 'Arial', color: '#ffff00' })
   };
 
@@ -344,17 +340,8 @@ function update(time, delta) {
     }
     return;
   }
-  if (state === LEVELUP || state === SHOP) return;
+  if (state === LEVELUP) return;
   if (state !== PLAYING) return;
-
-  // Check for shop keypress (SHIFT)
-  if (keys.SHIFT && keys.SHIFT.isDown) {
-    const now = time;
-    if (!keys.lastShopPress || now - keys.lastShopPress > 500) {
-      keys.lastShopPress = now;
-      showShop();
-    }
-  }
 
   // Check for time cheat keypress (T) - adds 30 seconds
   if (keys.T && keys.T.isDown) {
@@ -387,12 +374,12 @@ function update(time, delta) {
       keys.lastRPress = now;
       // Clean up and restart manually
       if (p && p.sprite) {
-        try { p.sprite.destroy(); } catch(e) {}
+        try { p.sprite.destroy(); } catch (e) { }
         p.sprite = null;
       }
       for (let e of enemies) {
         if (e && e.sprite) {
-          try { e.sprite.destroy(); } catch(e) {}
+          try { e.sprite.destroy(); } catch (e) { }
           e.sprite = null;
         }
       }
@@ -400,16 +387,15 @@ function update(time, delta) {
       projs = [];
       projQueue = [];
       xpCrys = [];
-      goldDrops = [];
       particles = [];
       wpns = [];
-      
+
       // Load high score for title screen
       let highScore = 0;
       try {
         highScore = parseInt(localStorage.getItem('hackerSurvivorsHighScore') || '0');
-      } catch (e) {}
-      
+      } catch (e) { }
+
       sceneRef.children.removeAll();
       g = sceneRef.add.graphics();
       showTitleScreen(highScore);
@@ -445,19 +431,19 @@ function update(time, delta) {
 
   // Enemy spawning (wave system with difficulty scaling)
   const wave = Math.floor(gameTime / 30000);
-  
+
   // Spawn rate decreases over time (enemies spawn faster)
   // Base starts at 2000ms, decreases by 100ms per wave, minimum 300ms
   // Also decreases gradually within each wave based on time
   const waveProgress = (gameTime % 30000) / 30000; // 0 to 1 within current wave
   const baseSpawnRate = Math.max(300, 2000 - wave * 100 - waveProgress * 50);
-  
+
   // Calculate difficulty multiplier based on time (increases every 2 minutes)
   const difficultyMult = 1 + Math.floor(gameTime / 120000) * 0.15 + (gameTime % 120000) / 120000 * 0.15;
-  
+
   // Calculate spawn count multiplier (spawn multiple enemies at once as time progresses)
   const spawnCountMult = 1 + Math.floor(gameTime / 60000); // +1 enemy every minute
-  
+
   spawnT += delta;
   if (spawnT > baseSpawnRate) {
     spawnT = 0;
@@ -467,7 +453,7 @@ function update(time, delta) {
       const spawnCount = Math.min(spawnCountMult, 3); // Max 3 at once
       for (let s = 0; s < spawnCount; s++) {
         if (enemies.length >= maxEnemies) break;
-        
+
         // Spawn based on wave
         const rand = Math.random();
         if (wave < 2 || rand < 0.6) {
@@ -551,7 +537,7 @@ function update(time, delta) {
         }
       }
     }
-    
+
     // Handle chain bounce
     if (proj.owner === 'chain' && proj.bounces !== undefined) {
       // Chain projectile will bounce in collision handler
@@ -577,19 +563,18 @@ function update(time, delta) {
         if (proj.owner === 'chain' && proj.hitEnemies && proj.hitEnemies.includes(j)) {
           continue;
         }
-        
+
         e.hp -= proj.dmg;
         playTone(sceneRef, 100, 0.05);
         createParticles(e.x, e.y, e.color, 4);
-        
+
         // Handle chain bounce
         if (proj.owner === 'chain') {
           if (!proj.hitEnemies) proj.hitEnemies = [];
           proj.hitEnemies.push(j);
-          
+
           if (e.hp <= 0) {
             xpCrys.push({ x: e.x, y: e.y, rad: 5, val: e.xp });
-            goldDrops.push({ x: e.x, y: e.y, rad: 4, val: e.gold || Math.floor(e.xp * 2) });
             createParticles(e.x, e.y, e.color, 12);
             if (enemies[j].sprite) enemies[j].sprite.destroy();
             enemies.splice(j, 1);
@@ -598,7 +583,7 @@ function update(time, delta) {
             const idx = proj.hitEnemies.indexOf(j);
             if (idx >= 0) proj.hitEnemies.splice(idx, 1);
           }
-          
+
           // Find next closest enemy to bounce to
           let nextTarget = null;
           let minDist = Infinity;
@@ -610,7 +595,7 @@ function update(time, delta) {
               nextTarget = enemies[k];
             }
           }
-          
+
           if (nextTarget && (proj.bounces || 0) < 5) { // Max 5 bounces
             const dx = nextTarget.x - e.x;
             const dy = nextTarget.y - e.y;
@@ -629,10 +614,9 @@ function update(time, delta) {
           }
           continue; // Don't remove chain projectile yet
         }
-        
+
         if (e.hp <= 0) {
           xpCrys.push({ x: e.x, y: e.y, rad: 5, val: e.xp });
-          goldDrops.push({ x: e.x, y: e.y, rad: 4, val: e.gold || Math.floor(e.xp * 2) });
           createParticles(e.x, e.y, e.color, 12);
           if (enemies[j].sprite) enemies[j].sprite.destroy();
           enemies.splice(j, 1);
@@ -671,26 +655,6 @@ function update(time, delta) {
         lvl++;
         showLevelUp();
       }
-    }
-  }
-
-  // Update gold drops
-  for (let i = goldDrops.length - 1; i >= 0; i--) {
-    const drop = goldDrops[i];
-    const dist = Math.sqrt((p.x - drop.x) ** 2 + (p.y - drop.y) ** 2);
-    if (dist < pickupRange) {
-      const pull = 300;
-      const d = Math.max(1, dist);
-      drop.x += ((p.x - drop.x) / d) * pull * (delta / 1000);
-      drop.y += ((p.y - drop.y) / d) * pull * (delta / 1000);
-    }
-
-    const pd = Math.sqrt((p.x - drop.x) ** 2 + (p.y - drop.y) ** 2);
-    if (pd < p.rad + drop.rad) {
-      gold += drop.val;
-      playTone(sceneRef, 800, 0.1);
-      createParticles(drop.x, drop.y, 0xffaa00, 6);
-      goldDrops.splice(i, 1);
     }
   }
 
@@ -747,7 +711,6 @@ function update(time, delta) {
           createParticles(e.x, e.y, e.color, 2);
           if (e.hp <= 0) {
             xpCrys.push({ x: e.x, y: e.y, rad: 5, val: e.xp });
-            goldDrops.push({ x: e.x, y: e.y, rad: 4, val: e.gold || Math.floor(e.xp * 2) });
             createParticles(e.x, e.y, e.color, 12);
             if (enemies[i].sprite) enemies[i].sprite.destroy();
             enemies.splice(i, 1);
@@ -774,12 +737,11 @@ function update(time, delta) {
   updateMatrixBackground(delta);
 
   // Update UI (only if uiTexts exists)
-  if (uiTexts && uiTexts.time && uiTexts.hp && uiTexts.gold && uiTexts.xp) {
+  if (uiTexts && uiTexts.time && uiTexts.hp && uiTexts.xp) {
     const minutes = Math.floor(gameTime / 60000);
     const seconds = Math.floor((gameTime % 60000) / 1000);
     uiTexts.time.setText('TIME: ' + minutes + ':' + String(seconds).padStart(2, '0'));
     uiTexts.hp.setText('HP: ' + Math.max(0, Math.floor(hp)) + '/' + maxHp);
-    uiTexts.gold.setText('Gold: ' + gold);
     const reqXp = 5 + (lvl - 1) * 5;
     uiTexts.xp.setText('XP: ' + xp + '/' + reqXp + ' [Lvl ' + lvl + ']');
   }
@@ -800,10 +762,9 @@ function spawnEnemy(type, difficultyMult = 1) {
   const hpMult = difficultyMult;
   const spdMult = 1 + (difficultyMult - 1) * 0.3; // Speed increases slower
   const xpMult = difficultyMult;
-  const goldMult = difficultyMult;
 
   if (type === 'bug') {
-    const baseHp = 20, baseSpd = 80, baseXp = 1, baseGold = 2;
+    const baseHp = 20, baseSpd = 80, baseXp = 1;
     const e = {
       type: 'bug',
       x: x,
@@ -813,14 +774,13 @@ function spawnEnemy(type, difficultyMult = 1) {
       spd: Math.floor(baseSpd * spdMult),
       rad: 8,
       xp: Math.floor(baseXp * xpMult),
-      gold: Math.floor(baseGold * goldMult),
       color: 0xff0000,
       difficultyMult: difficultyMult,
       sprite: sceneRef.add.sprite(x, y, 'bug').setScale(2).setOrigin(0.5)
     };
     enemies.push(e);
   } else if (type === 'virus') {
-    const baseHp = 10, baseSpd = 140, baseXp = 2, baseGold = 4;
+    const baseHp = 10, baseSpd = 140, baseXp = 2;
     const e = {
       type: 'virus',
       x: x,
@@ -830,14 +790,13 @@ function spawnEnemy(type, difficultyMult = 1) {
       spd: Math.floor(baseSpd * spdMult),
       rad: 6,
       xp: Math.floor(baseXp * xpMult),
-      gold: Math.floor(baseGold * goldMult),
       color: 0xff00ff,
       difficultyMult: difficultyMult,
       sprite: sceneRef.add.sprite(x, y, 'virus').setScale(2).setOrigin(0.5)
     };
     enemies.push(e);
   } else if (type === 'trojan') {
-    const baseHp = 80, baseSpd = 50, baseXp = 5, baseGold = 10;
+    const baseHp = 80, baseSpd = 50, baseXp = 5;
     const e = {
       type: 'trojan',
       x: x,
@@ -847,7 +806,6 @@ function spawnEnemy(type, difficultyMult = 1) {
       spd: Math.floor(baseSpd * spdMult),
       rad: 12,
       xp: Math.floor(baseXp * xpMult),
-      gold: Math.floor(baseGold * goldMult),
       color: 0x0000ff,
       difficultyMult: difficultyMult,
       sprite: sceneRef.add.sprite(x, y, 'trojan').setScale(2.5).setOrigin(0.5)
@@ -879,7 +837,7 @@ function fireFirewall(w, now) {
       const spd = baseSpd * projSpdMult;
       const count = Math.max(1, Math.floor(projCountMult));
       let angle = Math.atan2(dy, dx);
-      
+
       // Queue projectiles to fire sequentially one after another
       for (let i = 0; i < count; i++) {
         const delay = i * 50; // 50ms delay between each projectile
@@ -928,12 +886,6 @@ function drawGame() {
   for (let crys of xpCrys) {
     g.fillStyle(0xffff00, 1);
     g.fillCircle(crys.x, crys.y, crys.rad);
-  }
-
-  // Draw gold drops
-  for (let drop of goldDrops) {
-    g.fillStyle(0xffaa00, 1);
-    g.fillCircle(drop.x, drop.y, drop.rad);
   }
 
   // Draw particles
@@ -1023,12 +975,12 @@ function endGame() {
   spaceKey.once('down', () => {
     // Clean up all sprites before restarting
     if (p && p.sprite) {
-      try { p.sprite.destroy(); } catch(e) {}
+      try { p.sprite.destroy(); } catch (e) { }
       p.sprite = null;
     }
     for (let e of enemies) {
       if (e && e.sprite) {
-        try { e.sprite.destroy(); } catch(e) {}
+        try { e.sprite.destroy(); } catch (e) { }
         e.sprite = null;
       }
     }
@@ -1036,16 +988,15 @@ function endGame() {
     projs = [];
     projQueue = [];
     xpCrys = [];
-    goldDrops = [];
     particles = [];
     wpns = [];
-    
+
     // Load high score for title screen
     let highScore = 0;
     try {
       highScore = parseInt(localStorage.getItem('hackerSurvivorsHighScore') || '0');
-    } catch (e) {}
-    
+    } catch (e) { }
+
     sceneRef.children.removeAll();
     g = sceneRef.add.graphics();
     showTitleScreen(highScore);
@@ -1058,12 +1009,12 @@ function fireMalware(w, now) {
   const dirs = baseDirs * count; // Multiply directions by projectile count
   const baseSpd = 300;
   const spd = baseSpd * projSpdMult;
-  
+
   // Queue projectiles sequentially for malware spread too
   for (let i = 0; i < dirs; i++) {
     const angle = (i / dirs) * Math.PI * 2;
     const delay = Math.floor(i / baseDirs) * 50; // 50ms delay between each "burst" of 8 projectiles
-    
+
     projQueue.push({
       x: p.x,
       y: p.y,
@@ -1150,226 +1101,6 @@ function findNearestEnemy() {
   return nearest;
 }
 
-function showShop() {
-  state = SHOP;
-  playTone(sceneRef, 440, 0.2);
-
-  const overlay = sceneRef.add.graphics();
-  overlay.fillStyle(0x000000, 0.85);
-  overlay.fillRect(0, 0, 800, 600);
-
-  const title = sceneRef.add.text(400, 80, 'TREASURE SHOP', {
-    fontSize: '48px',
-    fontFamily: 'Arial',
-    color: '#ffaa00'
-  }).setOrigin(0.5);
-
-  const goldText = sceneRef.add.text(400, 130, 'Gold: ' + gold, {
-    fontSize: '32px',
-    fontFamily: 'Arial',
-    color: '#ffaa00'
-  }).setOrigin(0.5);
-
-  // Generate shop items
-  const items = getShopItems();
-  upgradeCards = [];
-  let selectedIndex = 0;
-
-  const updateCardVisuals = () => {
-    for (let i = 0; i < upgradeCards.length; i++) {
-      const uc = upgradeCards[i];
-      const canAfford = gold >= uc.opt.cost;
-      const isSelected = i === selectedIndex;
-      uc.card.clear();
-      uc.card.fillStyle(0x1a1a1a, 1);
-      if (isSelected) {
-        uc.card.lineStyle(3, canAfford ? 0xffff00 : 0xff6666, 1);
-      } else {
-        uc.card.lineStyle(2, canAfford ? 0xffaa00 : 0x666666, 1);
-      }
-      uc.card.fillRect(uc.x - 150, uc.y - 70, 300, 140);
-      uc.card.strokeRect(uc.x - 150, uc.y - 70, 300, 140);
-      uc.name.setColor(isSelected && canAfford ? '#ffff00' : (canAfford ? '#ffaa00' : '#666666'));
-    }
-  };
-
-  for (let i = 0; i < Math.min(4, items.length); i++) {
-    const item = items[i];
-    const cardX = 150 + (i % 2) * 400;
-    const cardY = 250 + Math.floor(i / 2) * 200;
-
-    const card = sceneRef.add.graphics();
-    card.fillStyle(0x1a1a1a, 1);
-    const canAfford = gold >= item.cost;
-    card.lineStyle(2, canAfford ? 0xffaa00 : 0x666666, 1);
-    card.fillRect(cardX - 150, cardY - 70, 300, 140);
-    card.strokeRect(cardX - 150, cardY - 70, 300, 140);
-
-    const name = sceneRef.add.text(cardX, cardY - 40, item.name, {
-      fontSize: '22px',
-      fontFamily: 'Arial',
-      color: i === 0 && canAfford ? '#ffff00' : (canAfford ? '#ffaa00' : '#666666')
-    }).setOrigin(0.5);
-
-    const desc = sceneRef.add.text(cardX, cardY + 10, item.desc, {
-      fontSize: '16px',
-      fontFamily: 'Arial',
-      color: '#ffffff'
-    }).setOrigin(0.5);
-
-    const cost = sceneRef.add.text(cardX, cardY + 50, 'Cost: ' + item.cost + ' Gold', {
-      fontSize: '18px',
-      fontFamily: 'Arial',
-      color: canAfford ? '#00ff00' : '#ff0000'
-    }).setOrigin(0.5);
-
-    upgradeCards.push({ card, name, desc, cost, opt: item, x: cardX, y: cardY });
-  }
-
-  const closeText = sceneRef.add.text(400, 550, 'Press ESC or SHIFT to Close', {
-    fontSize: '20px',
-    fontFamily: 'Arial',
-    color: '#ffffff'
-  }).setOrigin(0.5);
-
-  const buyItem = () => {
-    if (state !== SHOP) return;
-    const uc = upgradeCards[selectedIndex];
-    if (gold >= uc.opt.cost) {
-      gold -= uc.opt.cost;
-      applyUpgrade(uc.opt);
-      playTone(sceneRef, 600, 0.15);
-      goldText.setText('Gold: ' + gold);
-      updateCardVisuals();
-    } else {
-      playTone(sceneRef, 200, 0.1);
-    }
-  };
-
-  const navUp = () => {
-    if (state !== SHOP || upgradeCards.length <= 2) return;
-    selectedIndex = Math.max(0, selectedIndex - 2);
-    updateCardVisuals();
-    playTone(sceneRef, 300, 0.1);
-  };
-
-  const navDown = () => {
-    if (state !== SHOP || upgradeCards.length <= 2) return;
-    selectedIndex = Math.min(upgradeCards.length - 1, selectedIndex + 2);
-    updateCardVisuals();
-    playTone(sceneRef, 300, 0.1);
-  };
-
-  const navLeft = () => {
-    if (state !== SHOP) return;
-    if (selectedIndex % 2 === 1) {
-      selectedIndex--;
-      updateCardVisuals();
-      playTone(sceneRef, 300, 0.1);
-    }
-  };
-
-  const navRight = () => {
-    if (state !== SHOP) return;
-    if (selectedIndex % 2 === 0 && selectedIndex < upgradeCards.length - 1) {
-      selectedIndex++;
-      updateCardVisuals();
-      playTone(sceneRef, 300, 0.1);
-    }
-  };
-
-  const closeShop = () => {
-    state = PLAYING;
-    overlay.destroy();
-    title.destroy();
-    goldText.destroy();
-    closeText.destroy();
-    for (let uc2 of upgradeCards) {
-      uc2.card.destroy();
-      uc2.name.destroy();
-      uc2.desc.destroy();
-      uc2.cost.destroy();
-    }
-    upgradeCards = [];
-    if (keys.W) keys.W.off('down');
-    if (keys.A) keys.A.off('down');
-    if (keys.S) keys.S.off('down');
-    if (keys.D) keys.D.off('down');
-    if (keys.SPACE) keys.SPACE.off('down');
-    if (keys.ESC) keys.ESC.off('down');
-    if (keys.SHIFT) keys.SHIFT.off('down');
-  };
-
-  updateCardVisuals();
-
-  let lastNavTime = 0;
-  const navDelay = 200;
-
-  const handleNav = (direction) => {
-    const now = Date.now();
-    if (now - lastNavTime < navDelay) return;
-    lastNavTime = now;
-    direction();
-  };
-
-  keys.W = sceneRef.input.keyboard.addKey('W');
-  keys.A = sceneRef.input.keyboard.addKey('A');
-  keys.S = sceneRef.input.keyboard.addKey('S');
-  keys.D = sceneRef.input.keyboard.addKey('D');
-  keys.SPACE = sceneRef.input.keyboard.addKey('SPACE');
-  keys.ESC = sceneRef.input.keyboard.addKey('ESC');
-  keys.SHIFT = sceneRef.input.keyboard.addKey('SHIFT');
-
-  keys.W.on('down', () => handleNav(navUp));
-  keys.A.on('down', () => handleNav(navLeft));
-  keys.S.on('down', () => handleNav(navDown));
-  keys.D.on('down', () => handleNav(navRight));
-  keys.SPACE.on('down', buyItem);
-  keys.ESC.once('down', closeShop);
-  keys.SHIFT.once('down', () => {
-    if (state === SHOP) closeShop();
-  });
-}
-
-function getShopItems() {
-  const items = [];
-
-  // Weapon unlocks
-  const hasMalware = wpns.some(w => w.type === 'malware');
-  const hasDDoS = wpns.some(w => w.type === 'ddos');
-  const hasHook = wpns.some(w => w.type === 'hook');
-  const hasChain = wpns.some(w => w.type === 'chain');
-  
-  if (!hasMalware) items.push({ type: 'weapon', name: 'Malware Spread', desc: '8-directional attack', weapon: 'malware', cost: 50 });
-  if (!hasDDoS) items.push({ type: 'weapon', name: 'DDoS Attack', desc: 'Area damage aura', weapon: 'ddos', cost: 75 });
-  if (!hasHook) items.push({ type: 'weapon', name: 'Phishing Hook', desc: 'Boomerang projectile', weapon: 'hook', cost: 60 });
-  if (!hasChain) items.push({ type: 'weapon', name: 'Chain Lightning', desc: 'Bounces between enemies', weapon: 'chain', cost: 65 });
-
-  // Permanent upgrades
-  items.push({ type: 'hp', name: '+20 Max HP', desc: 'Increase max health', cost: 40 });
-  items.push({ type: 'speed', name: '+10% Speed', desc: 'Move faster', cost: 35 });
-  items.push({ type: 'xpgain', name: '+15% XP Gain', desc: 'Earn more XP', cost: 45 });
-  items.push({ type: 'pickup', name: '+5% Pickup Range', desc: 'Larger magnet range', cost: 30 });
-  items.push({ type: 'damage', name: '+10% All Damage', desc: 'Boost all weapons', cost: 50 });
-  items.push({ type: 'heal', name: 'Heal 50%', desc: 'Restore half HP', cost: 25 });
-  items.push({ type: 'projcount', name: '+1 Projectile', desc: 'Fire extra projectile', cost: 55 });
-  items.push({ type: 'projspeed', name: '+20% Proj Speed', desc: 'Faster projectiles', cost: 45 });
-  if (hasDDoS) items.push({ type: 'aurasize', name: '+25% Aura Size', desc: 'Larger DDoS aura', cost: 50 });
-  items.push({ type: 'attackspeed', name: '+15% Attack Speed', desc: 'Fire weapons faster', cost: 50 });
-
-  // Weapon upgrades (if weapon exists)
-  for (let w of wpns) {
-    items.push({ type: 'weaponup', name: w.type.charAt(0).toUpperCase() + w.type.slice(1) + ' +1', desc: '+20% dmg, +15% rate', weapon: w.type, cost: 40 });
-  }
-
-  // Shuffle
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [items[i], items[j]] = [items[j], items[i]];
-  }
-
-  return items.slice(0, 4);
-}
 
 function showLevelUp() {
   state = LEVELUP;
@@ -1494,7 +1225,7 @@ function getUpgradeOptions() {
   const hasDDoS = wpns.some(w => w.type === 'ddos');
   const hasHook = wpns.some(w => w.type === 'hook');
   const hasChain = wpns.some(w => w.type === 'chain');
-  
+
   if (!hasMalware) all.push({ type: 'weapon', name: 'Malware Spread', desc: '8-directional attack', weapon: 'malware' });
   if (!hasDDoS) all.push({ type: 'weapon', name: 'DDoS Attack', desc: 'Area damage aura', weapon: 'ddos' });
   if (!hasHook) all.push({ type: 'weapon', name: 'Phishing Hook', desc: 'Boomerang projectile', weapon: 'hook' });
@@ -1516,7 +1247,7 @@ function getUpgradeOptions() {
   all.push({ type: 'projspeed', name: '+20% Proj Speed', desc: 'Faster projectiles' });
   if (hasDDoS) all.push({ type: 'aurasize', name: '+25% Aura Size', desc: 'Larger DDoS aura' });
   all.push({ type: 'attackspeed', name: '+15% Attack Speed', desc: 'Fire weapons faster' });
-  
+
   // Shuffle and pick 3
   for (let i = all.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
